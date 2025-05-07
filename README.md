@@ -1,6 +1,7 @@
 # Sisop-3-2025-IT02
 
-# Soal Ketiga
+# Soal Pertama
+# The Legend of Rootkids
 - **Server**: `image_server.c`  
 - **Client**: `image_client.c`
 
@@ -99,23 +100,6 @@ void parse_buffer(char *buffer, char *command, char *data) {
     - Jika tidak ada tanda -, maka command dan data akan menjadi string kosong.
     - Menghapus karakter newline atau carriage return (\r\n) pada akhir command dan data.
 - Fungsi ini membantu untuk menangani dan memecah perintah dari input yang berformat tertentu.
-
-
-
-```c
-void write_log(const char *source, const char *action, const char *info) {
-  FILE *log_file = fopen("server.log", "a");
-  if (!log_file) return;
-
-  time_t now = time(NULL);
-  struct tm *t = localtime(&now);
-  char timestamp[32];
-  strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
-
-  fprintf(log_file, "[%s][%s]: [%s] [%s]\n", source, timestamp, action, info);
-  fclose(log_file);
-}
-```
 ```c
 void handle_decrypt(int client_fd, const char *data) {
   int len = strlen(data);
@@ -294,6 +278,247 @@ int main() {
 - Menjalankan server:
     - Memanggil run_rpc_server() untuk memulai server dan menangani perintah dari klien.
 **Kesimpulan singkat:** Fungsi main menyiapkan lingkungan (folder dan log), lalu menjalankan server daemon yang siap menerima koneksi.
+
+
+#### ➡️ Kode image_client.c
+```c
+#define clear_screen() system("clear")
+#define PORT 6969
+#define LOCALHOST "127.0.0.1"
+#define BUFFER_SIZE 6969
+
+int create_connection() {
+    int sockfd;
+    struct sockaddr_in server_addr;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, LOCALHOST, &server_addr.sin_addr);
+
+    if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connection failed");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    return sockfd;
+}
+```
+
+#### ➡️ Fungsi program ini:
+- Sebagai client yang terhubung ke server untuk:
+- Mengirim file ke server (pakai perintah decrypt).
+- Mendownload file dari server.
+- Keluar dari koneksi server.
+**Tujuan:**
+- Untuk berkomunikasi dengan server RPC dan melakukan proses kirim gambar terenkripsi dan ambil gambar hasil decrypt.
+```c
+void send_message(int sockfd, const char *message) {
+    write(sockfd, message, strlen(message));
+}
+
+void receive_message(int sockfd, char *buffer) {
+    memset(buffer, 0, BUFFER_SIZE);
+    read(sockfd, buffer, BUFFER_SIZE);
+}
+```
+#### ➡️ fungsi send_message dan receive_message
+- Fungsi ini untuk mengirim dan menerima data lewat koneksi socket.
+- `send_message()`: Mengirim pesan ke server melalui socket.
+- `receive_message()`: Menerima balasan dari server dan menyimpannya di buffer.
+**Tujuan:**
+- Supaya client bisa berkomunikasi dengan server (kirim perintah, terima respon).
+```c
+void handle_exit() {
+    int sockfd = create_connection();
+    send_message(sockfd, "exit-null");
+    close(sockfd);
+    printf("Exiting...\n");
+    exit(EXIT_SUCCESS);
+}
+```
+#### ➡️ fungsi handle_send
+- Fungsi ini untuk keluar dari aplikasi client dengan cara yang benar.
+- Buka koneksi ke server.
+- Kirim perintah "exit-null" ke server (supaya server tahu client mau keluar).
+- Tutup koneksi.
+- Tampilkan pesan "Exiting..." dan keluar dari program.
+**Tujuan:**
+- Memberitahu server bahwa client disconnect secara resmi, lalu menghentikan aplikasi client.
+```c
+void handle_send() {
+    char filename[256];
+    printf("Enter filename to send ➤ ");
+    scanf("%s", filename);
+    getchar();  // consume newline
+
+    FILE *fp = fopen(filename, "r");
+    if (!fp) {
+        perror("Failed to open file");
+        return;
+    }
+
+    char file_content[BUFFER_SIZE];
+    memset(file_content, 0, BUFFER_SIZE);
+
+    fread(file_content, 1, BUFFER_SIZE - 1, fp);
+    fclose(fp);
+
+    int sockfd = create_connection();
+    char buffer[BUFFER_SIZE];
+
+    char message[BUFFER_SIZE];
+    snprintf(message, sizeof(message), "decrypt-%s", file_content);
+
+    send_message(sockfd, message);
+    receive_message(sockfd, buffer);
+//    clear_screen();
+    
+    printf("Server Response: %s\n\n", buffer);
+
+    close(sockfd);
+}
+```
+#### ➡️ fungsi handle_send
+- Fungsi ini untuk mengirim file ke server agar diproses (didecrypt).
+- scanf(): Meminta user memasukkan nama file.
+- fopen(): Membuka file yang dipilih user.
+- fread(): Membaca isi file ke dalam buffer.
+- create_connection(): Membuka koneksi ke server.
+- snprintf(): Menyiapkan pesan dengan format decrypt-<isi file>.
+- send_message(): Mengirim pesan ke server.
+- receive_message(): Menerima respon dari server.
+- close(): Menutup koneksi socket.
+**Tujuan:**
+- Supaya client bisa mengirim file ke server untuk disimpan sebagai gambar ter-decrypt.
+
+```c
+void hex_to_bytes(const char *hex_str, unsigned char *byte_array, size_t *byte_len) {
+    size_t hex_len = strlen(hex_str);
+    *byte_len = hex_len / 2;
+    for (size_t i = 0; i < *byte_len; ++i) {
+        sscanf(&hex_str[i * 2], "%2hhx", &byte_array[i]);
+    }
+}
+```
+#### ➡️ fungsi hex_to_bytes
+- Fungsi ini untuk mengubah string hex menjadi array byte asli.
+- strlen(): Menghitung panjang string hex.
+- byte_len: Menyimpan jumlah byte hasil konversi (panjang hex dibagi 2).
+- sscanf(): Membaca 2 karakter hex lalu mengubahnya menjadi 1 byte dan disimpan di array.
+**Tujuan:**
+- Supaya data yang dikirim server dalam format hex bisa dikonversi kembali jadi file asli (binary) di sisi client.
+```c
+void handle_download(const char *filename) {
+    int sockfd = create_connection();
+    char buffer[BUFFER_SIZE * 2];
+
+    char message[300];
+    snprintf(message, sizeof(message), "download-%s", filename);
+
+    send_message(sockfd, message);
+
+    FILE *outfile = fopen(filename, "wb");
+    if (!outfile) {
+        perror("Failed to open output file");
+        close(sockfd);
+        return;
+    }
+    printf("Downloading and saving to file: %s\n", filename);
+
+    ssize_t bytes_received;
+    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';
+
+        unsigned char byte_array[BUFFER_SIZE];
+        size_t byte_len;
+        hex_to_bytes(buffer, byte_array, &byte_len);
+
+        fwrite(byte_array, 1, byte_len, outfile);
+    }
+
+    if (bytes_received < 0) {
+        perror("recv failed");
+    }
+
+    printf("Download complete!\n");
+
+    fclose(outfile);
+    close(sockfd);
+}
+```
+#### ➡️ fungsi handle_download
+- Fungsi ini untuk mendownload file dari server dan menyimpannya di komputer client.
+- snprintf(): Mengirim perintah download-nama_file ke server.
+- fopen(): Membuka file output untuk menyimpan hasil download.
+- recv(): Menerima data dari server dalam bentuk hex.
+- hex_to_bytes(): Mengubah data hex jadi byte asli.
+- fwrite(): Menulis data byte ke file yang sedang didownload.
+- Tutup file dan koneksi setelah selesai.
+**Tujuan:**
+- Supaya client bisa meminta file dari server dan menyimpannya sebagai file asli di komputer.
+```c
+void show_menu() {
+    printf("========================================\n");
+    printf("        Image Decoder Client            \n");
+    printf("========================================\n");
+    printf(" 1. Send input file to server\n");
+    printf(" 2. Download file from server\n");
+    printf(" 3. Exit\n");
+    printf("========================================\n");
+    printf("Enter your choice ➤ ");
+}
+```
+#### ➡️ fungsi show_menu
+- Untuk menampilkan menu
+```c
+int main() {
+    char choice;
+
+    while (1) {
+        show_menu();
+        choice = getchar();
+        getchar(); 
+
+        switch (choice) {
+            case '1':
+                handle_send();
+                break;
+            case '2': {
+                char filename[256];
+                printf("Enter filename to download: ");
+                scanf("%255s", filename);
+                getchar();  // consume newline
+                handle_download(filename);
+                break;
+            }
+            case '3':
+                handle_exit();
+                break;
+            default:
+                printf("Invalid choice, please try again.\n");
+        }
+    }
+
+    return 0;
+}
+```
+#### ➡️ fungsi main
+- Menampilkan menu berulang untuk pilihan: kirim, unduh, dan keluar.
+- Menerima input pengguna dan menjalankan fungsi yang sesuai.
+- Menangani input tidak valid dengan pesan kesalahan.
+- Program berlanjut hingga pilihan "keluar" dipilih.
+**Tujuan:**
+- Menyediakan antarmuka menu untuk memungkinkan pengguna melakukan tindakan tertentu dan menangani input yang salah.
+
+# Soal Kedua
+# Delivery
 
 # Soal Ketiga
 # Lost Dungeon
