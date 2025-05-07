@@ -1,6 +1,301 @@
 # Sisop-3-2025-IT02
 
 # Soal Ketiga
+- **Server**: `image_server.c`  
+- **Client**: `image_client.c`
+
+#### ➡️ Kode image_server.c
+```c
+void daemonize() {
+  pid_t pid, sid;
+
+  pid = fork();
+
+  if (pid < 0)
+    exit(EXIT_FAILURE);
+  if (pid > 0)
+    exit(EXIT_SUCCESS);
+
+  umask(0);
+
+  sid = setsid();
+  if (sid < 0)
+    exit(EXIT_FAILURE);
+
+  if ((chdir("/home/kali/modul3/soal_1/")) < 0)
+    exit(EXIT_FAILURE);
+
+  close(STDIN_FILENO);
+  close(STDOUT_FILENO);
+  close(STDERR_FILENO);
+}
+```
+#### ➡️ daemon
+- Fungsi ini digunakan supaya program server bisa berjalan di background (sebagai daemon).
+- Langkah sederhananya:
+    - fork() ➔ membuat proses baru, proses lama keluar.
+    - setsid() ➔ pisah dari terminal, jadi proses bebas.
+    - chdir() ➔ pindah ke folder kerja soal.
+    - close() ➔ menutup input/output supaya server tidak muncul di terminal.
+- Tujuan:
+    - Agar server bisa jalan otomatis tanpa tampilan di terminal, seperti service di Linux.
+ 
+```c
+void write_log(const char *source, const char *action, const char *info) {
+  FILE *log_file = fopen("server.log", "a");
+  if (!log_file) return;
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  char timestamp[32];
+  strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
+
+  fprintf(log_file, "[%s][%s]: [%s] [%s]\n", source, timestamp, action, info);
+  fclose(log_file);
+}
+```
+
+#### ➡️ Fungsi write_log ini dipakai untuk mencatat:
+- Perintah `decrypt`
+- Perintah `download`
+- Perintah `exit`
+- Perintah yang tidak valid (invalid command)
+
+#### 🎯 **Tujuan:**
+Supaya aktivitas server bisa dicek/dilacak kapan saja dengan membuka file `server.log`.
+
+```c
+void parse_buffer(char *buffer, char *command, char *data) {
+  char temp[BUFFER_SIZE];
+  strncpy(temp, buffer, BUFFER_SIZE);
+  temp[BUFFER_SIZE - 1] = '\0';
+
+  char *token = strtok(temp, "-");
+  if (token != NULL) {
+      strcpy(command, token);
+
+      token = strtok(NULL, "-");
+      if (token != NULL) {
+          strcpy(data, token);
+      } else {
+          strcpy(data, "");
+      }
+
+  } else {
+      strcpy(command, "");
+      strcpy(data, "");
+  }
+
+  command[strcspn(command, "\r\n")] = 0;
+  data[strcspn(data, "\r\n")] = 0;
+}
+```
+
+#### ➡️ Fungsi parse_buffer
+- Fungsi parse_buffer berfungsi untuk memecah string input (buffer) menjadi dua bagian: command dan data, yang dipisahkan oleh tanda hubung (-). Fungsi ini bekerja dengan cara:
+    - Menyalin string buffer ke variabel sementara (temp) untuk menghindari perubahan pada buffer asli.
+    - Menggunakan strtok() untuk memisahkan string berdasarkan tanda -.
+    - Menyimpan bagian pertama sebagai command dan bagian kedua (jika ada) sebagai data.
+    - Jika tidak ada tanda -, maka command dan data akan menjadi string kosong.
+    - Menghapus karakter newline atau carriage return (\r\n) pada akhir command dan data.
+- Fungsi ini membantu untuk menangani dan memecah perintah dari input yang berformat tertentu.
+
+
+
+```c
+void write_log(const char *source, const char *action, const char *info) {
+  FILE *log_file = fopen("server.log", "a");
+  if (!log_file) return;
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  char timestamp[32];
+  strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
+
+  fprintf(log_file, "[%s][%s]: [%s] [%s]\n", source, timestamp, action, info);
+  fclose(log_file);
+}
+```
+```c
+void handle_decrypt(int client_fd, const char *data) {
+  int len = strlen(data);
+
+  char reversed[BUFFER_SIZE];
+  for (int i = 0; i < len; i++) {
+    reversed[i] = data[len - i - 1];
+  }
+  reversed[len] = '\0';
+
+  unsigned char byte_array[BUFFER_SIZE];
+  int byte_len = 0;
+  for (int i = 0; i < len; i += 2) {
+    char byte_str[3] = { reversed[i], reversed[i+1], 0 }; // 2 char + null
+    byte_array[byte_len++] = (unsigned char)strtol(byte_str, NULL, 16);
+  }
+
+  time_t now = time(NULL);
+  char filename[64];
+  snprintf(filename, sizeof(filename), "database/%ld.jpeg", now);
+
+  FILE *fp = fopen(filename, "wb");
+  if (fp) {
+    fwrite(byte_array, 1, byte_len, fp);
+    fclose(fp);
+  }
+
+  char response[BUFFER_SIZE];
+  snprintf(response, sizeof(response), "Saved %d bytes to %s", byte_len, filename);
+  write(client_fd, response, strlen(response));
+}
+```
+#### ➡️ fungsi handle_decrypt
+- Fungsi ini menangani proses dekripsi data yang diterima dari klien:
+    - Membalik urutan string hex: String hex yang diterima dibalik urutannya karakter per karakter (bukan per byte).
+    - Konversi string hex menjadi array byte: Setelah dibalik, setiap pasangan karakter hex (misalnya FF) dikonversi menjadi byte menggunakan strtol() dan disimpan dalam array byte_array.
+    - Simpan ke file dengan nama timestamp: Data byte yang dihasilkan disimpan ke dalam file .jpeg di direktori database/ dengan nama file yang dihasilkan dari timestamp saat itu (misalnya       1234567890.jpeg).
+    - Kirim respon ke klien: Setelah file disimpan, fungsi mengirimkan pesan ke klien berisi jumlah byte yang disimpan dan nama file yang digunakan.
+```c
+void bytes_to_hex(const unsigned char *bytes, size_t len, char *hex_output) {
+    const char hex_digits[] = "0123456789ABCDEF";
+    for (size_t i = 0; i < len; ++i) {
+        hex_output[i * 2] = hex_digits[(bytes[i] >> 4) & 0x0F];
+        hex_output[i * 2 + 1] = hex_digits[bytes[i] & 0x0F];
+    }
+    hex_output[len * 2] = '\0'; // Null-terminate
+}
+```
+#### ➡️ fungsi bytes_to_hex
+- Fungsi ini mengonversi array byte menjadi string hex:
+    - Setiap byte diubah menjadi dua karakter hex menggunakan lookup table (hex_digits), dan hasilnya disimpan dalam hex_output.
+    - Fungsi ini mengonversi setiap byte ke dua digit hex dan menambahkan null-terminator di akhir string.
+- Kedua fungsi bekerja bersama untuk mengonversi data hex menjadi byte dan menyimpannya sebagai file gambar, serta mengonversi kembali data byte menjadi representasi hex saat perlu.
+
+```c
+void handle_invalid(int client_fd) {
+  char *msg = "Invalid Command\n";
+  write(client_fd, msg, strlen(msg));
+}
+```
+#### ➡️ fungsi handle_invalid
+- Mengirimkan pesan "Invalid Command" kepada klien jika perintah yang diterima tidak valid.
+
+```c
+void run_rpc_server() {
+  int server_fd, client_fd;
+  struct sockaddr_in server_addr, client_addr;
+  socklen_t addr_len;
+  char buffer[BUFFER_SIZE];
+  char command[BUFFER_SIZE];
+  char data[BUFFER_SIZE];
+
+  server_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (server_fd == -1) {
+    exit(EXIT_FAILURE);
+  }
+
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = htons(PORT);
+
+  if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    close(server_fd);
+    exit(EXIT_FAILURE);
+  }
+
+  if (listen(server_fd, 5) < 0) {
+    close(server_fd);
+    exit(EXIT_FAILURE);
+  }
+
+  while (1) {
+    addr_len = sizeof(client_addr);
+    client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_len);
+    if (client_fd < 0) {
+      continue;
+    }
+
+    memset(buffer, 0, BUFFER_SIZE);
+    read(client_fd, buffer, BUFFER_SIZE);
+
+    memset(command, 0, BUFFER_SIZE);
+    memset(data, 0, BUFFER_SIZE);
+    parse_buffer(buffer, command, data);
+
+    if (strcmp(command, "ping") == 0) {
+      handle_ping(client_fd);
+    } else if (strcmp(command, "decrypt") == 0) {
+      handle_decrypt(client_fd, data);
+      write_log("Client", "DECRYPT", "Text Data");
+
+    } else if (strcmp(command, "download") == 0) {
+      handle_download(client_fd,data);
+      write_log("Client", "DOWNLOAD", "Text Data");
+
+    } else if (strcmp(command, "exit") == 0) {
+      close(client_fd);
+      write_log("Client", "EXIT", "Client Requested Exit");
+
+    } else {
+      handle_invalid(client_fd);
+      write_log("Client", "INVALID", buffer);
+    }
+
+    close(client_fd);
+  }
+
+  close(server_fd);
+}
+```
+#### ➡️ fungsi run_rpc_server
+- Fungsi ini mengatur server RPC yang menerima koneksi dari klien dan mengeksekusi perintah yang diterima.
+    - Membuat socket server: Menggunakan socket() untuk membuat server dengan tipe koneksi TCP (SOCK_STREAM).
+    - Mengikat socket: Menggunakan bind() untuk mengikat socket ke alamat IP dan port tertentu.
+    - Mendengarkan koneksi: Menggunakan listen() untuk menunggu koneksi dari klien.
+    - Menerima koneksi klien: Menggunakan accept() untuk menerima koneksi dari klien.
+    - Membaca data perintah: Menerima data dari klien menggunakan read().
+    - Memisahkan command dan data: Menggunakan parse_buffer() untuk memisahkan perintah (command) dan data (data).
+- **Menangani perintah:**
+    - Jika perintah adalah ping, memanggil handle_ping().
+    - Jika perintah adalah decrypt, memanggil handle_decrypt() dan mencatat log.
+    - Jika perintah adalah download, memanggil handle_download() dan mencatat log.
+    - Jika perintah adalah exit, menutup koneksi dan mencatat log.
+    - Jika perintah tidak valid, memanggil handle_invalid() dan mencatat log.
+  - **Menutup koneksi:** Setelah menangani perintah, koneksi dengan klien ditutup menggunakan close().
+- Fungsi ini memastikan server menerima dan merespons berbagai perintah dari klien, serta mencatat aktivitas ke dalam log.
+
+```c
+int main() {
+  daemonize();
+
+  if (mkdir("database", 0755) == -1 && errno != EEXIST) {
+    perror("mkdir failed");
+    exit(EXIT_FAILURE);
+  }
+
+  FILE *log_file = fopen("server.log", "a");
+  if (!log_file) {
+    perror("Failed to create/open server.log");
+    exit(EXIT_FAILURE);
+  }
+  fclose(log_file);
+
+  run_rpc_server();
+  return 0;
+}
+```
+#### ➡️ fungsi main:
+- Fungsi utama yang menjalankan server RPC sebagai daemon.
+- daemonize(): Mengubah proses menjadi daemon, sehingga berjalan di latar belakang.
+- Membuat folder database/:
+    - Menggunakan mkdir() untuk membuat folder tempat file hasil decrypt disimpan.
+    - Jika folder sudah ada (EEXIST), lanjut tanpa error.
+- Membuka (atau membuat) file log server.log:
+    - Jika gagal membuka/menulis file log, program akan keluar.
+- Menjalankan server:
+    - Memanggil run_rpc_server() untuk memulai server dan menangani perintah dari klien.
+**Kesimpulan singkat:** Fungsi main menyiapkan lingkungan (folder dan log), lalu menjalankan server daemon yang siap menerima koneksi.
+
+# Soal Ketiga
 # Lost Dungeon
 
 **Lost Dungeon** adalah game RPG terminal berbasis client‑server yang sepenuhnya ditulis dalam bahasa C.  
