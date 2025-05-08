@@ -62,7 +62,7 @@ void write_log(const char *source, const char *action, const char *info) {
 - Perintah `exit`
 - Perintah yang tidak valid (invalid command)
 
-#### 🎯 **Tujuan:**
+#### **Tujuan:**
 Supaya aktivitas server bisa dicek/dilacak kapan saja dengan membuka file `server.log`.
 
 ```c
@@ -519,6 +519,445 @@ int main() {
 
 # Soal Kedua
 # Delivery
+- **Server**: `delivery_agent.c`  
+- **Client**: `dispatcher.c`
+
+### Kode (`delivery_agent.c`)
+```c
+#define MAX_ORDERS 100
+#define MAX_STRING 100
+#define SHM_NAME "/rushgo_shared"
+
+typedef struct {
+    int id;  // ID order
+    char nama_penerima[MAX_STRING];
+    char alamat[MAX_STRING];
+    char layanan[MAX_STRING]; // Express / Reguler
+    int sudah_dikirim; // 0 = belum, 1 = sudah
+} Order;
+
+typedef struct {
+    Order orders[MAX_ORDERS];
+    int jumlah_order;
+} SharedData;
+
+SharedData *shared_data;
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+```
+#### ➡️ deklarasi struct dan variabel global
+- Kode tersebut adalah bagian dari program C yang menggunakan shared memory dan multithreading. Berikut penjelasan singkatnya:
+  - Order adalah struct yang merepresentasikan data pesanan (ID, nama penerima, alamat, jenis layanan, status pengiriman).
+  - SharedData adalah struct yang menampung array dari Order sebanyak MAX_ORDERS (100) dan jumlah total order yang ada.
+  - shared_data adalah pointer ke SharedData yang akan menunjuk ke shared memory bernama "/rushgo_shared".
+  - pthread_mutex_t mutex digunakan sebagai kunci (lock) agar akses ke shared_data aman jika ada banyak thread yang berjalan bersamaan. Ini mencegah data rusak (race condition) saat ada     - thread yang membaca/menulis ke shared memory secara bersamaan.
+```c
+void tulis_log(const char *agent, const char *nama, const char *alamat) {
+    FILE *log = fopen("delivery.log", "a");
+    if (!log) return;
+
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    char waktu[32];
+    strftime(waktu, sizeof(waktu), "%d/%m/%Y %H:%M:%S", tm_info);
+
+    fprintf(log, "[%s] [%s] Express package delivered to %s in %s\n",
+            waktu, agent, nama, alamat);
+    fclose(log);
+}
+```
+#### ➡️ Fungsi tulis_log
+Fungsi tulis_log mencatat pengiriman paket ke file delivery.log.
+Penjelasan singkat:
+- fopen: Buka file log dalam mode tambah (append).
+- if (!log) return;: Keluar jika gagal buka file.
+- time(NULL): Ambil waktu sekarang.
+- localtime: Ubah waktu jadi format lokal.
+- strftime: Format waktu jadi string (contoh: 08/05/2025 14:30:00).
+- fprintf: Tulis log ke file, formatnya:
+- [waktu] [agent] Express package delivered to [nama] in [alamat]
+- fclose: Tutup file.
+```c
+void* agent_worker(void *arg) {
+    char *agent_name = (char *)arg;
+
+    while (1) {
+        int found = 0;
+
+        pthread_mutex_lock(&mutex);
+        for (int i = 0; i < shared_data->jumlah_order; i++) {
+            Order *o = &shared_data->orders[i];
+            // Menggunakan strcasecmp untuk perbandingan tanpa memperhatikan huruf kapital
+            if (strcasecmp(o->layanan, "Express") == 0 && o->sudah_dikirim == 0) {
+                o->sudah_dikirim = 1;
+                printf("[%s] Mengirim order ID %d ke %s\n", agent_name, o->id, o->nama_penerima);
+                tulis_log(agent_name, o->nama_penerima, o->alamat);
+                found = 1;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&mutex);
+
+        if (!found) break; // Tidak ada lagi order Express
+        sleep(1); // Simulasi pengiriman
+    }
+
+    pthread_exit(NULL);
+}
+```
+#### ➡️ Fungsi agent_worker
+- Fungsi agent_worker adalah fungsi thread untuk agen pengirim paket.
+- Dia akan mencari dan mengirim order Express satu per satu.
+- Penjelasan bagian penting:
+- `char *agent_name = (char *)arg;`
+  - Ambil nama agen dari argumen thread.
+- `while (1) { ... }`
+  - Loop terus menerus sampai semua order Express selesai dikirim.
+- `pthread_mutex_lock(&mutex);`
+  - Kunci akses ke shared memory supaya thread lain tidak ganggu (menghindari bentrok data).
+- `for (int i = 0; i < shared_data->jumlah_order; i++)`
+  - Loop semua order yang ada.
+- `if (strcasecmp(...))`
+- Cek apakah order layanan Express dan belum dikirim (sudah_dikirim == 0).
+- Jika ketemu:
+  - Tandai order sudah dikirim: o->sudah_dikirim = 1.
+  - Cetak ke terminal bahwa agen sedang mengirim.
+  - Panggil tulis_log untuk catat log pengiriman.
+  - `found = 1;` tandai bahwa ada order yang diproses.
+  - `break;` keluar dari loop karena hanya kirim satu order dalam satu iterasi.
+- `pthread_mutex_unlock(&mutex);`
+  - Lepas kunci supaya thread lain bisa akses shared memory lagi.
+- `if (!found) break;`
+- Jika tidak ada lagi order Express yang belum dikirim, keluar dari loop (selesai).
+- `sleep(1);`
+  - Simulasi jeda 1 detik untuk proses pengiriman.
+- `pthread_exit(NULL);`
+- Thread selesai.
+
+```c
+int main() {
+    int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("Gagal membuka shared memory");
+        return 1;
+    }
+
+    shared_data = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shared_data == MAP_FAILED) {
+        perror("Gagal mmap");
+        return 1;
+    }
+
+    pthread_t agents[3];
+    char *agent_names[3] = {"AGENT A", "AGENT B", "AGENT C"};
+
+    for (int i = 0; i < 3; i++) {
+        pthread_create(&agents[i], NULL, agent_worker, agent_names[i]);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        pthread_join(agents[i], NULL);
+    }
+
+    munmap(shared_data, sizeof(SharedData));
+    close(shm_fd);
+    return 0;
+}
+```
+#### ➡️ Fungsi main
+- Fungsi main melakukan hal-hal berikut:
+  - Membuka shared memory dengan nama "/rushgo_shared":
+- Jika gagal, tampilkan pesan error dan keluar.
+  - Mapping shared memory ke dalam program menggunakan mmap, sehingga bisa diakses.
+- Jika gagal, tampilkan pesan error dan keluar.
+- Membuat 3 thread agen (AGENT A, AGENT B, AGENT C) untuk menjalankan fungsi agent_worker.
+- Menunggu ketiga thread selesai (pthread_join).
+- Setelah semua thread selesai, membebaskan memory (munmap) dan menutup shared memory (close).
+
+
+### Kode (`dispatcher.c`)
+```c
+#define MAX_ORDERS 100
+#define MAX_STRING 100
+#define SHM_NAME "/rushgo_shared"
+
+typedef struct {
+    int id; 
+    char nama_penerima[MAX_STRING];
+    char alamat[MAX_STRING];
+    char layanan[MAX_STRING]; 
+    int sudah_dikirim; 
+} Order;
+
+typedef struct {
+    Order orders[MAX_ORDERS];
+    int jumlah_order;
+} SharedData;
+```
+#### ➡️ deklarasi struct
+- Kode ini mendefinisikan struktur untuk menangani data pesanan dalam sebuah sistem berbagi memori (shared memory).
+  - `MAX_ORDERS` adalah jumlah maksimal pesanan yang bisa disimpan (100 pesanan).
+  - `MAX_STRING` adalah panjang maksimal string (100 karakter) untuk nama penerima, alamat, dan layanan.
+  - `SHM_NAME` adalah nama segmen memori bersama yang digunakan untuk berbagi data antar proses.
+- Struktur Order menyimpan informasi setiap pesanan, seperti ID, nama penerima, alamat, layanan, dan status pengiriman (sudah dikirim atau belum).
+- Struktur SharedData menyimpan array pesanan (orders) dan jumlah pesanan yang ada (jumlah_order).
+- Tujuan utama adalah memungkinkan beberapa proses untuk mengakses dan mengelola pesanan secara bersama-sama dalam memori.
+```c
+void log_pengiriman(char *user_name, Order *order) {
+    FILE *log = fopen("delivery.log", "a");
+    if (log) {
+        time_t now = time(NULL);  
+        struct tm *tm_info = localtime(&now);  
+        char waktu[32];
+        strftime(waktu, sizeof(waktu), "%d/%m/%Y %H:%M:%S", tm_info);  // Format waktu
+        fprintf(log, "[%s] [AGENT %s] %s package delivered to %s in %s\n", 
+                waktu, user_name, order->layanan, order->nama_penerima, order->alamat);
+        fclose(log);
+    }
+}
+```
+#### ➡️ fungsi log_pengiriman
+- Fungsi log_pengiriman digunakan untuk mencatat informasi pengiriman ke dalam file log (delivery.log).
+  - user_name: Nama agen yang mengirimkan paket.
+  - order: Pointer ke struktur Order yang berisi detail pesanan.
+- Fungsi ini:
+  - Membuka file log (delivery.log) dalam mode append.
+  - Mengambil waktu saat ini dan memformatnya.
+  - Mencatat informasi pengiriman, termasuk waktu, nama agen, layanan, nama penerima, dan alamat, ke dalam file log.
+  - Menutup file log setelah mencatat.
+```c
+void pengiriman_reguler(char *user_name, SharedData *shared_data) {
+    int found = 0;
+    for (int i = 0; i < shared_data->jumlah_order; i++) {
+        Order *order = &shared_data->orders[i];
+        if (strcasecmp(order->layanan, "Reguler") == 0 && order->sudah_dikirim == 0) {
+            if (order->sudah_dikirim == 0) {
+                order->sudah_dikirim = 1;
+
+                log_pengiriman(user_name, order);
+
+                printf("Order Reguler dengan nama penerima %s telah dikirim oleh agent %s.\n", 
+                       order->nama_penerima, user_name);
+                found = 1;
+            }
+            break;
+        }
+    }
+
+    if (!found) {
+        printf("Tidak ditemukan order Reguler yang belum dikirim.\n");
+    }
+}
+```
+#### ➡️ fungsi pengiriman_reguler
+- Mencari Pesanan "Reguler" yang Belum Dikirim: Fungsi mencari pesanan dengan layanan "Reguler" dan status sudah_dikirim == 0.
+- Mengubah Status Pesanan: Jika pesanan ditemukan, status sudah_dikirim diubah menjadi 1 (terkirim).
+- Mencatat Pengiriman: Fungsi log_pengiriman dipanggil untuk mencatat pengiriman ke dalam log.
+- Pesan Konfirmasi: Mencetak pesan ke layar bahwa pesanan telah dikirim oleh agen.
+- Tidak Ditemukan Pesanan: Jika tidak ada pesanan yang ditemukan, mencetak pesan bahwa tidak ada pesanan "Reguler" yang belum dikirim.
+- Tujuan:
+- Memproses dan mencatat pengiriman pesanan "Reguler" yang belum dikirim oleh agen, serta memberikan informasi konfirmasi kepada pengguna.
+```c
+void cek_status_pesanan(char *nama, SharedData *shared_data) {
+    int found = 0;
+    for (int i = 0; i < shared_data->jumlah_order; i++) {
+        Order *order = &shared_data->orders[i];
+        if (strcasecmp(order->nama_penerima, nama) == 0) {
+            if (order->sudah_dikirim == 1) {
+                printf("Status for %s: Delivered by Agent %s\n", order->nama_penerima, "Agent X"); // Bisa diubah sesuai agent
+            } else {
+                printf("Status for %s: Pending\n", order->nama_penerima);
+            }
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        printf("Order dengan nama %s tidak ditemukan.\n", nama);
+    }
+}
+```
+#### ➡️ fungsi cek_status_pesanan
+- Mencari Pesanan Berdasarkan Nama Penerima: Fungsi mencari pesanan yang sesuai dengan nama penerima yang diberikan.
+- Cek Status Pesanan:
+  - Jika pesanan sudah dikirim (sudah_dikirim == 1), mencetak status "Delivered".
+  - Jika pesanan belum dikirim, mencetak status "Pending".
+- Pesan Tidak Ditemukan: Jika pesanan dengan nama penerima tidak ditemukan, mencetak pesan bahwa pesanan tidak ada.
+- Tujuan:
+- Memeriksa dan menampilkan status pengiriman pesanan berdasarkan nama penerima, apakah sudah terkirim atau masih pending.
+```c
+
+void list_semua_pesanan(SharedData *shared_data) {
+    printf("Daftar Pesanan:\n");
+    for (int i = 0; i < shared_data->jumlah_order; i++) {
+        Order *order = &shared_data->orders[i];
+        printf("ID: %d, Nama Penerima: %s, Layanan: %s, Status: %s\n", 
+               order->id, order->nama_penerima, order->layanan, 
+               order->sudah_dikirim == 1 ? "Delivered" : "Pending");
+    }
+}
+```
+#### ➡️ fungsi list_semua_pesanan
+- Menampilkan Daftar Pesanan: Fungsi mencetak daftar semua pesanan yang ada dalam shared_data->orders.
+- Menampilkan Detail Pesanan: Untuk setiap pesanan, ditampilkan:
+  - ID: ID pesanan.
+  - Nama Penerima: Nama penerima pesanan.
+  - Layanan: Jenis layanan pesanan.
+  - Status: Status pengiriman, apakah "Delivered" (sudah dikirim) atau "Pending" (belum dikirim).
+- Tujuan:
+- Menampilkan daftar lengkap pesanan beserta detailnya, termasuk status pengiriman, kepada pengguna.
+```c
+int main(int argc, char *argv[]) {
+    if (argc == 1) {
+        printf("Membaca file CSV dan menyimpan data ke shared memory...\n");
+
+        FILE *file = fopen("delivery_order.csv", "r");
+        if (!file) {
+            perror("Gagal membuka file CSV");
+            return 1;
+        }
+
+        int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+        if (shm_fd == -1) {
+            perror("Gagal membuat shared memory");
+            return 1;
+        }
+
+        ftruncate(shm_fd, sizeof(SharedData));
+
+        SharedData *shared_data = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+        if (shared_data == MAP_FAILED) {
+            perror("Gagal mmap");
+            return 1;
+        }
+
+        char buffer[256];
+        fgets(buffer, sizeof(buffer), file); 
+
+        int i = 0;
+        while (fgets(buffer, sizeof(buffer), file) && i < MAX_ORDERS) {
+            sscanf(buffer, "%99[^,],%99[^,],%99[^\n]",
+                   shared_data->orders[i].nama_penerima,
+                   shared_data->orders[i].alamat,
+                   shared_data->orders[i].layanan);
+
+            shared_data->orders[i].id = i + 1;  
+            shared_data->orders[i].sudah_dikirim = 0;  
+            i++;
+        }
+        shared_data->jumlah_order = i;
+
+        printf("Berhasil menyimpan %d order ke shared memory.\n", i);
+
+        fclose(file);
+        munmap(shared_data, sizeof(SharedData));
+        close(shm_fd);
+    } else if (argc == 3 && strcmp(argv[1], "-deliver") == 0) {
+        char *user_name = argv[2];
+        
+        int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
+        if (shm_fd == -1) {
+            perror("Gagal membuka shared memory");
+            return 1;
+        }
+
+        SharedData *shared_data = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+        if (shared_data == MAP_FAILED) {
+            perror("Gagal mmap");
+            return 1;
+        }
+
+        int found = 0;
+        for (int i = 0; i < shared_data->jumlah_order; i++) {
+            Order *order = &shared_data->orders[i];
+            if (strcasecmp(order->nama_penerima, user_name) == 0 && order->sudah_dikirim == 0) {
+                if (order->sudah_dikirim == 0) {
+                    order->sudah_dikirim = 1;
+
+                    log_pengiriman(user_name, order);
+
+                    printf("Order Reguler dengan nama penerima %s telah dikirim oleh agent %s.\n", 
+                           order->nama_penerima, user_name);
+                    found = 1;
+                }
+                break;
+            }
+        }
+
+        if (!found) {
+            printf("Tidak ditemukan order dengan nama penerima %s atau order sudah dikirim.\n", user_name);
+        }
+
+        munmap(shared_data, sizeof(SharedData));
+        close(shm_fd);
+    } else if (argc == 3 && strcmp(argv[1], "-status") == 0) {
+        char *nama = argv[2];
+
+        int shm_fd = shm_open(SHM_NAME, O_RDONLY, 0666);
+        if (shm_fd == -1) {
+            perror("Gagal membuka shared memory");
+            return 1;
+        }
+
+        SharedData *shared_data = mmap(NULL, sizeof(SharedData), PROT_READ, MAP_SHARED, shm_fd, 0);
+        if (shared_data == MAP_FAILED) {
+            perror("Gagal mmap");
+            return 1;
+        }
+
+        cek_status_pesanan(nama, shared_data);
+
+        munmap(shared_data, sizeof(SharedData));
+        close(shm_fd);
+    } else if (argc == 2 && strcmp(argv[1], "-list") == 0) {
+        int shm_fd = shm_open(SHM_NAME, O_RDONLY, 0666);
+        if (shm_fd == -1) {
+            perror("Gagal membuka shared memory");
+            return 1;
+        }
+
+        SharedData *shared_data = mmap(NULL, sizeof(SharedData), PROT_READ, MAP_SHARED, shm_fd, 0);
+        if (shared_data == MAP_FAILED) {
+            perror("Gagal mmap");
+            return 1;
+        }
+
+        list_semua_pesanan(shared_data);
+
+        munmap(shared_data, sizeof(SharedData));
+        close(shm_fd);
+    } else {
+        fprintf(stderr, "Usage: %s [-deliver [Nama]] [-status [Nama]] [-list]\n", argv[0]);
+        return 1;
+    }
+
+    return 0;
+}
+```
+- Jika Tidak Ada Argumen (argc == 1):
+  - Membaca data dari file CSV (delivery_order.csv) dan menyimpannya ke dalam shared memory.
+  - Membuka file CSV dan shared memory.
+  - Menggunakan fgets untuk membaca data dari file CSV dan sscanf untuk mem-parsing data pesanan (nama penerima, alamat, dan layanan).
+  - Menyimpan data pesanan dalam shared memory dan mengatur status sudah_dikirim menjadi 0 (belum dikirim).
+  - Menutup file dan shared memory setelah selesai.
+- Jika Ada Argumen -deliver dan Nama Agen (argc == 3 && strcmp(argv[1], "-deliver") == 0):
+  - Mencari pesanan yang belum dikirim berdasarkan nama penerima yang diberikan.
+  - Jika ditemukan, mengubah status sudah_dikirim menjadi 1, mencatat pengiriman ke dalam log, dan menampilkan konfirmasi.
+  - Jika tidak ditemukan, mencetak pesan bahwa pesanan belum dikirim atau tidak ditemukan.
+- Jika Ada Argumen -status dan Nama Penerima (argc == 3 && strcmp(argv[1], "-status") == 0):
+  - Mencari status pesanan berdasarkan nama penerima.
+  - Menampilkan status pengiriman, apakah sudah terkirim atau masih pending.
+- Jika Ada Argumen -list (argc == 2 && strcmp(argv[1], "-list") == 0):
+  - Menampilkan daftar semua pesanan yang ada dalam shared memory.
+  - Menampilkan ID, nama penerima, layanan, dan status pengiriman untuk setiap pesanan.
+- Jika Argumen Tidak Valid:
+  - Menampilkan pesan penggunaan yang benar untuk program.
+- Tujuan:
+- Fungsi main() ini adalah untuk menangani beberapa operasi terkait pengiriman pesanan menggunakan shared memory, termasuk membaca file CSV, memproses pengiriman, memeriksa status pesanan, dan menampilkan daftar pesanan.
+
+
+
 
 # Soal Ketiga
 # Lost Dungeon
