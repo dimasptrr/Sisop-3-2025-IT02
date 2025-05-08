@@ -5,7 +5,7 @@
 - **Server**: `image_server.c`  
 - **Client**: `image_client.c`
 
-#### ➡️ Kode image_server.c
+#### Kode image_server.c
 ```c
 void daemonize() {
   pid_t pid, sid;
@@ -31,7 +31,7 @@ void daemonize() {
   close(STDERR_FILENO);
 }
 ```
-#### ➡️ daemon
+#### daemon
 - Fungsi ini digunakan supaya program server bisa berjalan di background (sebagai daemon).
 - Langkah sederhananya:
     - fork() ➔ membuat proses baru, proses lama keluar.
@@ -56,7 +56,7 @@ void write_log(const char *source, const char *action, const char *info) {
 }
 ```
 
-#### ➡️ Fungsi write_log ini dipakai untuk mencatat:
+#### Fungsi write_log ini dipakai untuk mencatat:
 - Perintah `decrypt`
 - Perintah `download`
 - Perintah `exit`
@@ -92,7 +92,7 @@ void parse_buffer(char *buffer, char *command, char *data) {
 }
 ```
 
-#### ➡️ Fungsi parse_buffer
+#### Fungsi parse_buffer
 - Fungsi parse_buffer berfungsi untuk memecah string input (buffer) menjadi dua bagian: command dan data, yang dipisahkan oleh tanda hubung (-). Fungsi ini bekerja dengan cara:
     - Menyalin string buffer ke variabel sementara (temp) untuk menghindari perubahan pada buffer asli.
     - Menggunakan strtok() untuk memisahkan string berdasarkan tanda -.
@@ -132,7 +132,7 @@ void handle_decrypt(int client_fd, const char *data) {
   write(client_fd, response, strlen(response));
 }
 ```
-#### ➡️ fungsi handle_decrypt
+#### fungsi handle_decrypt
 - Fungsi ini menangani proses dekripsi data yang diterima dari klien:
     - Membalik urutan string hex: String hex yang diterima dibalik urutannya karakter per karakter (bukan per byte).
     - Konversi string hex menjadi array byte: Setelah dibalik, setiap pasangan karakter hex (misalnya FF) dikonversi menjadi byte menggunakan strtol() dan disimpan dalam array byte_array.
@@ -148,7 +148,7 @@ void bytes_to_hex(const unsigned char *bytes, size_t len, char *hex_output) {
     hex_output[len * 2] = '\0'; // Null-terminate
 }
 ```
-#### ➡️ fungsi bytes_to_hex
+#### fungsi bytes_to_hex
 - Fungsi ini mengonversi array byte menjadi string hex:
     - Setiap byte diubah menjadi dua karakter hex menggunakan lookup table (hex_digits), dan hasilnya disimpan dalam hex_output.
     - Fungsi ini mengonversi setiap byte ke dua digit hex dan menambahkan null-terminator di akhir string.
@@ -160,7 +160,7 @@ void handle_invalid(int client_fd) {
   write(client_fd, msg, strlen(msg));
 }
 ```
-#### ➡️ fungsi handle_invalid
+#### fungsi handle_invalid
 - Mengirimkan pesan "Invalid Command" kepada klien jika perintah yang diterima tidak valid.
 
 ```c
@@ -230,7 +230,7 @@ void run_rpc_server() {
   close(server_fd);
 }
 ```
-#### ➡️ fungsi run_rpc_server
+#### fungsi run_rpc_server
 - Fungsi ini mengatur server RPC yang menerima koneksi dari klien dan mengeksekusi perintah yang diterima.
     - Membuat socket server: Menggunakan socket() untuk membuat server dengan tipe koneksi TCP (SOCK_STREAM).
     - Mengikat socket: Menggunakan bind() untuk mengikat socket ke alamat IP dan port tertentu.
@@ -267,7 +267,7 @@ int main() {
   return 0;
 }
 ```
-#### ➡️ fungsi main:
+#### fungsi main:
 - Fungsi utama yang menjalankan server RPC sebagai daemon.
 - daemonize(): Mengubah proses menjadi daemon, sehingga berjalan di latar belakang.
 - Membuat folder database/:
@@ -280,7 +280,7 @@ int main() {
 **Kesimpulan singkat:** Fungsi main menyiapkan lingkungan (folder dan log), lalu menjalankan server daemon yang siap menerima koneksi.
 
 
-#### ➡️ Kode image_client.c
+#### Kode image_client.c
 ```c
 #define clear_screen() system("clear")
 #define PORT 6969
@@ -311,7 +311,7 @@ int create_connection() {
 }
 ```
 
-#### ➡️ Fungsi program ini:
+#### Fungsi program ini:
 - Sebagai client yang terhubung ke server untuk:
 - Mengirim file ke server (pakai perintah decrypt).
 - Mendownload file dari server.
@@ -328,7 +328,7 @@ void receive_message(int sockfd, char *buffer) {
     read(sockfd, buffer, BUFFER_SIZE);
 }
 ```
-#### ➡️ fungsi send_message dan receive_message
+#### fungsi send_message dan receive_message
 - Fungsi ini untuk mengirim dan menerima data lewat koneksi socket.
 - `send_message()`: Mengirim pesan ke server melalui socket.
 - `receive_message()`: Menerima balasan dari server dan menyimpannya di buffer.
@@ -343,7 +343,7 @@ void handle_exit() {
     exit(EXIT_SUCCESS);
 }
 ```
-#### ➡️ fungsi handle_send
+#### fungsi handle_send
 - Fungsi ini untuk keluar dari aplikasi client dengan cara yang benar.
 - Buka koneksi ke server.
 - Kirim perintah "exit-null" ke server (supaya server tahu client mau keluar).
@@ -385,7 +385,7 @@ void handle_send() {
     close(sockfd);
 }
 ```
-#### ➡️ fungsi handle_send
+#### fungsi handle_send
 - Fungsi ini untuk mengirim file ke server agar diproses (didecrypt).
 - scanf(): Meminta user memasukkan nama file.
 - fopen(): Membuka file yang dipilih user.
@@ -407,7 +407,7 @@ void hex_to_bytes(const char *hex_str, unsigned char *byte_array, size_t *byte_l
     }
 }
 ```
-#### ➡️ fungsi hex_to_bytes
+#### fungsi hex_to_bytes
 - Fungsi ini untuk mengubah string hex menjadi array byte asli.
 - strlen(): Menghitung panjang string hex.
 - byte_len: Menyimpan jumlah byte hasil konversi (panjang hex dibagi 2).
@@ -453,7 +453,7 @@ void handle_download(const char *filename) {
     close(sockfd);
 }
 ```
-#### ➡️ fungsi handle_download
+#### fungsi handle_download
 - Fungsi ini untuk mendownload file dari server dan menyimpannya di komputer client.
 - snprintf(): Mengirim perintah download-nama_file ke server.
 - fopen(): Membuka file output untuk menyimpan hasil download.
@@ -475,7 +475,7 @@ void show_menu() {
     printf("Enter your choice ➤ ");
 }
 ```
-#### ➡️ fungsi show_menu
+#### fungsi show_menu
 - Untuk menampilkan menu
 ```c
 int main() {
@@ -509,7 +509,7 @@ int main() {
     return 0;
 }
 ```
-#### ➡️ fungsi main
+#### fungsi main
 - Menampilkan menu berulang untuk pilihan: kirim, unduh, dan keluar.
 - Menerima input pengguna dan menjalankan fungsi yang sesuai.
 - Menangani input tidak valid dengan pesan kesalahan.
@@ -545,7 +545,7 @@ SharedData *shared_data;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 ```
-#### ➡️ deklarasi struct dan variabel global
+#### deklarasi struct dan variabel global
 - Kode tersebut adalah bagian dari program C yang menggunakan shared memory dan multithreading. Berikut penjelasan singkatnya:
   - Order adalah struct yang merepresentasikan data pesanan (ID, nama penerima, alamat, jenis layanan, status pengiriman).
   - SharedData adalah struct yang menampung array dari Order sebanyak MAX_ORDERS (100) dan jumlah total order yang ada.
@@ -566,7 +566,7 @@ void tulis_log(const char *agent, const char *nama, const char *alamat) {
     fclose(log);
 }
 ```
-#### ➡️ Fungsi tulis_log
+#### Fungsi tulis_log
 Fungsi tulis_log mencatat pengiriman paket ke file delivery.log.
 Penjelasan singkat:
 - fopen: Buka file log dalam mode tambah (append).
@@ -605,7 +605,7 @@ void* agent_worker(void *arg) {
     pthread_exit(NULL);
 }
 ```
-#### ➡️ Fungsi agent_worker
+#### Fungsi agent_worker
 - Fungsi agent_worker adalah fungsi thread untuk agen pengirim paket.
 - Dia akan mencari dan mengirim order Express satu per satu.
 - Penjelasan bagian penting:
@@ -664,7 +664,7 @@ int main() {
     return 0;
 }
 ```
-#### ➡️ Fungsi main
+#### Fungsi main
 - Fungsi main melakukan hal-hal berikut:
   - Membuka shared memory dengan nama "/rushgo_shared":
 - Jika gagal, tampilkan pesan error dan keluar.
@@ -694,7 +694,7 @@ typedef struct {
     int jumlah_order;
 } SharedData;
 ```
-#### ➡️ deklarasi struct
+#### deklarasi struct
 - Kode ini mendefinisikan struktur untuk menangani data pesanan dalam sebuah sistem berbagi memori (shared memory).
   - `MAX_ORDERS` adalah jumlah maksimal pesanan yang bisa disimpan (100 pesanan).
   - `MAX_STRING` adalah panjang maksimal string (100 karakter) untuk nama penerima, alamat, dan layanan.
@@ -716,7 +716,7 @@ void log_pengiriman(char *user_name, Order *order) {
     }
 }
 ```
-#### ➡️ fungsi log_pengiriman
+#### fungsi log_pengiriman
 - Fungsi log_pengiriman digunakan untuk mencatat informasi pengiriman ke dalam file log (delivery.log).
   - user_name: Nama agen yang mengirimkan paket.
   - order: Pointer ke struktur Order yang berisi detail pesanan.
@@ -749,7 +749,7 @@ void pengiriman_reguler(char *user_name, SharedData *shared_data) {
     }
 }
 ```
-#### ➡️ fungsi pengiriman_reguler
+#### fungsi pengiriman_reguler
 - Mencari Pesanan "Reguler" yang Belum Dikirim: Fungsi mencari pesanan dengan layanan "Reguler" dan status sudah_dikirim == 0.
 - Mengubah Status Pesanan: Jika pesanan ditemukan, status sudah_dikirim diubah menjadi 1 (terkirim).
 - Mencatat Pengiriman: Fungsi log_pengiriman dipanggil untuk mencatat pengiriman ke dalam log.
@@ -778,7 +778,7 @@ void cek_status_pesanan(char *nama, SharedData *shared_data) {
     }
 }
 ```
-#### ➡️ fungsi cek_status_pesanan
+#### fungsi cek_status_pesanan
 - Mencari Pesanan Berdasarkan Nama Penerima: Fungsi mencari pesanan yang sesuai dengan nama penerima yang diberikan.
 - Cek Status Pesanan:
   - Jika pesanan sudah dikirim (sudah_dikirim == 1), mencetak status "Delivered".
@@ -798,7 +798,7 @@ void list_semua_pesanan(SharedData *shared_data) {
     }
 }
 ```
-#### ➡️ fungsi list_semua_pesanan
+#### fungsi list_semua_pesanan
 - Menampilkan Daftar Pesanan: Fungsi mencetak daftar semua pesanan yang ada dalam shared_data->orders.
 - Menampilkan Detail Pesanan: Untuk setiap pesanan, ditampilkan:
   - ID: ID pesanan.
@@ -1486,3 +1486,229 @@ Proyek **Lost Dungeon** menggabungkan mekanisme client‑server sederhana dengan
    - **RPC manual** via string commands (tanpa library RPC khusus).  
    - **Randomization** di battle (HP, damage variation, critical, passive, reward).  
    - **Modularisasi**: shop/inventory/stat logic terpisah di `shop.c` agar kode lebih terstruktur.
+
+
+# Soal Keempat
+### Hunter.c
+
+### fungsi register_hunter()
+```c
+  if (system_data->num_hunters >= MAX_HUNTERS) {
+    printf("Sistem penuh. Tidak bisa menambahkan hunter baru.\n");
+    return;
+}
+
+```
+Mengecek apakah jumlah hunter sudah mencapai batas maksimum (MAX_HUNTERS).
+
+```c
+char username[50];
+printf("Masukkan username baru: ");
+scanf("%s", username);
+
+for (int i = 0; i < system_data->num_hunters; i++) {
+    if (strcmp(system_data->hunters[i].username, username) == 0) {
+        printf("Username sudah digunakan.\n");
+        return;
+    }
+}
+```
+- Meminta user untuk memasukkan username.
+- Mengecek apakah username sudah dipakai oleh hunter lain.
+
+```c
+struct Hunter *new_hunter = &system_data->hunters[system_data->num_hunters];
+strcpy(new_hunter->username, username);
+new_hunter->level = 1;
+new_hunter->exp = 0;
+new_hunter->atk = 10;
+new_hunter->hp = 100;
+new_hunter->def = 5;
+new_hunter->banned = 0;
+```
+Membuat hunter baru dengan data default (level 1, HP 100, ATK 10, dll).
+
+```c
+key_t hunter_key = ftok("/tmp", 'H' + system_data->num_hunters);
+int shmid = shmget(hunter_key, sizeof(struct Hunter), IPC_CREAT | 0666);
+```
+Membuat shared memory baru khusus untuk hunter ini, dengan key unik ('H' + indeks hunter).
+
+```c
+struct Hunter *personal_data = (struct Hunter *) shmat(shmid, NULL, 0);
+memcpy(personal_data, new_hunter, sizeof(struct Hunter));
+shmdt(personal_data);
+```
+Menyalin data hunter ke dalam shared memory, lalu melepaskan (detach).
+
+```c
+new_hunter->shm_key = hunter_key;
+system_data->num_hunters++;
+```
+Menyimpan key untuk keperluan login nanti dan menambah jumlah hunter terdaftar.
+
+### Fungsi login_hunter()
+```c
+char username[50];
+printf("Masukkan username: ");
+scanf("%s", username);
+
+for (int i = 0; i < system_data->num_hunters; i++) {
+    if (strcmp(system_data->hunters[i].username, username) == 0) {
+if (system_data->hunters[i].banned) {
+    printf("Hunter ini telah dibanned!\n");
+    return;
+}
+```
+- Meminta input username dari pengguna.
+- Mencari hunter yang sesuai di dalam system_data.
+- Menolak login jika hunter dibanned.
+  
+```c
+key_t key = system_data->hunters[i].shm_key;
+int shmid = shmget(key, sizeof(struct Hunter), 0666);
+
+struct Hunter *data = (struct Hunter *) shmat(shmid, NULL, 0);
+```
+- Mendapatkan shared memory milik hunter berdasarkan shm_key.
+- Attach shared memory agar bisa membaca data hunter.
+
+```c
+printf("Halo, %s!\n", data->username);
+printf("Level: %d | EXP: %d | HP: %d | ATK: %d | DEF: %d\n",
+       data->level, data->exp, data->hp, data->atk, data->def);
+```
+Menampilkan informasi hunter yang berhasil login.
+
+```c
+shmdt(data);
+```
+Detach shared memory hunter setelah digunakan.
+
+### Fungsi main()
+```c
+key_t key = get_system_key();
+int shmid = shmget(key, sizeof(struct SystemData), 0666);
+
+struct SystemData *system_data = (struct SystemData *) shmat(shmid, NULL, 0);
+```
+- Mendapatkan shared memory utama tempat semua hunter tersimpan.
+- Attach shared memory utama.
+
+```c
+printf("1. Registrasi\n2. Login\n3. Keluar\nPilihan: ");
+scanf("%d", &pilihan);
+
+while(1){
+    if (pilihan == 1) {
+        register_hunter(system_data);
+        break;
+    } else if (pilihan == 2) {
+        login_hunter(system_data);
+        break;
+    } else if (pilihan == 3) {
+        printf("Berhasil keluar");
+        break;
+    } else {
+        printf("invalid");
+        break;
+    }
+}
+
+shmdt(system_data);
+```
+- Menampilkan menu utama dan meminta pilihan user.
+- Menjalankan fungsi sesuai pilihan.
+- Melepas shared memory utama sebelum keluar program.
+
+### system.c
+
+### Fungsi main()
+
+```c
+if (system_data->initialized != 1) {
+    system_data->num_hunters = 0;
+    system_data->num_dungeons = 0;
+    system_data->current_notification_index = 0;
+    system_data->initialized = 1;
+}
+
+while (1) {
+    // Menu utama
+}
+```
+- Membuat atau mengambil shared memory utama untuk sistem hunter.
+- Jika ini pertama kali program dijalankan, data di dalam struct akan di-reset.
+- Loop menu utama: tampilkan hunter, buat dungeon, tampilkan dungeon, atau keluar.
+
+### Fungsi tampilkan_hunter()
+```c
+if (system_data->num_hunters == 0) {
+    printf("Belum ada hunter terdaftar.\n");
+    return;
+}
+```
+Cek apakah ada hunter terdaftar.
+
+```c
+for (int i = 0; i < system_data->num_hunters; i++) {
+    struct Hunter *h = &system_data->hunters[i];
+    printf("%-3d %-15s %-6d %-6d %-6d %-6d %-6d %-10s\n",
+           i + 1, h->username, h->level, h->exp, h->atk, h->hp, h->def,
+           h->banned ? "BANNED" : "ACTIVE");
+}
+```
+Menampilkan data hunter satu per satu dengan format tabel.
+
+### Fungsi buat_dungeon
+```c
+if (system_data->num_dungeons >= MAX_DUNGEONS) {
+    printf("Kapasitas dungeon penuh!\n");
+    return;
+}
+```
+Cegah pembuatan jika dungeon sudah penuh.
+
+```c
+srand(time(NULL) + rand()); // untuk random value unik
+strcpy(d->name, nama_dungeon[idx % TOTAL_DUNGEON_NAMA]);
+d->min_level = idx * 2;
+d->atk = rand() % 51 + 100;
+d->hp = rand() % 51 + 50;
+d->def = rand() % 26 + 25;
+d->exp = rand() % 151 + 150;
+```
+Memberikan nama dungeon dari daftar nama_dungeon[] dan mengisi data statistik secara acak.
+
+```c
+key_t dungeon_key = ftok("/tmp", 'D' + idx);
+int dshm = shmget(dungeon_key, sizeof(struct Dungeon), IPC_CREAT | 0666);
+
+memcpy(shared_d, d, sizeof(struct Dungeon));
+```
+- Buat shared memory baru untuk dungeon ini.
+- Simpan data dungeon ke shared memory.
+
+### Fungsi tampilkan_dungeons
+```c
+if (system_data->num_dungeons == 0) {
+    printf("Belum ada dungeon dibuat.\n");
+    return;
+}
+```
+Cek jika belum ada dungeon.
+
+```c
+for (int i = 0; i < system_data->num_dungeons; i++) {
+    struct Dungeon *d = &system_data->dungeons[i];
+    printf("%d. %s\n", i + 1, d->name);
+    printf("   - Level Minimum : %d\n", d->min_level);
+    printf("   - EXP           : %d\n", d->exp);
+    printf("   - ATK           : %d\n", d->atk);
+    printf("   - HP            : %d\n", d->hp);
+    printf("   - DEF           : %d\n", d->def);
+    printf("   - Shared Key    : %d\n", d->shm_key);
+}
+```
+Menampilkan info lengkap tiap dungeon.
+
